@@ -1,0 +1,26 @@
+[
+  {
+    "author": "Jack",
+    "title": "Coming home",
+    "url": "http://url1.com",
+    "likes": 3
+  },
+  {
+    "author": "Anna",
+    "title": "Anna's story",
+    "url": "http://url2.com",
+    "likes": 12
+  },
+  {
+    "author": "Danny",
+    "title": "What to eat today",
+    "url": "http://url3.com",
+    "likes": 8
+  },
+  {
+    "author": "Cheng Yi",
+    "title": "Business story",
+    "url": "http://url4.com",
+    "likes": 33
+  }
+]
