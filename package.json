@@ -4,13 +4,15 @@
   "description": "A blog list application, that allows users to save information about interesting blogs they have stumbled across on the internet. For each listed blog, save the author, title, url, and amount of upvotes from users of the application Part 4 - Fullstack 2021 Open Unversity of Helsinki",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon ./src/index.js",
-    "start": "node ./src/index.js"
+    "start": "node ./src/index.js",
+    "test": "jest --verbose",
+    "lint": "eslint ."
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "jest": "^27.0.6",
     "nodemon": "^2.0.12"
   },
   "dependencies": {
