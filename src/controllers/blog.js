@@ -1,11 +1,9 @@
 const express = require('express')
 const BlogModel = require('../models/blog')
-
+const logger = require('../utils/logger')
 const blogRouter = express.Router()
 
-blogRouter.get('/', (req, res) =>
-  BlogModel.find({}).then((blogs) => res.json(blogs))
-)
+blogRouter.get('/', async (req, res) => res.json(await BlogModel.find({})))
 
 blogRouter.post('/', (req, res) => {
   const body = req.body
@@ -19,7 +17,7 @@ blogRouter.post('/', (req, res) => {
     .save()
     .then((result) => res.status(201).json(result))
     .catch((error) => {
-      console.log(error)
+      logger.error(error)
       res.status(400).end()
     })
 })
