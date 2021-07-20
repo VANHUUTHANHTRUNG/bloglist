@@ -56,9 +56,13 @@ blogRouter.delete('/:id', middleware.userExtractor, async (req, res) => {
   if (deletedBlog) return res.status(204).end()
 })
 
-blogRouter.put('/:id', async (req, res) => {
-  const body = req.body
+blogRouter.put('/:id', middleware.userExtractor, async (req, res) => {
+  const userFromToken = req.user
   const newBlog = { ...req.body }
+  const blogToUpdate = await BlogModel.findById(req.params.id)
+  if (!blogToUpdate) return res.status(404).end()
+  if (userFromToken._id.toString() !== blogToUpdate.user.toString())
+    return res.status(403).json('no creator right to update')
   const updatedBlog = await BlogModel.findByIdAndUpdate(
     req.params.id,
     newBlog,
@@ -67,7 +71,6 @@ blogRouter.put('/:id', async (req, res) => {
   if (updatedBlog) {
     return res.status(200).end()
   }
-  return res.status(404).end()
 })
 
 module.exports = blogRouter

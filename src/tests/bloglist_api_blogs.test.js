@@ -250,23 +250,68 @@ describe('DELETE authorized /api/blogs/:id', () => {
   })
 })
 
-describe('UPDATE /api/blogs/:id', () => {
-  test('succeeds with status code 200 if id is valid', async () => {
-    const blogsAtStart = await helper.blogsInDB()
-    const blogToUpdate = blogsAtStart[0]
+describe('UPDATE authorized /api/blogs/:id', () => {
+  test('succeeds with status code 200 if id is valid and token matches', async () => {
+    const chosenInfo = infoFromToken[1]
+    const notChosenInfo = infoFromToken[2]
+    const invalidToken = 'NotAValidToken'
+
+    const loginUser = await UserModel.findOne({ username: chosenInfo.username })
+    const blogToPost = {
+      author: 'Kim Yoemi',
+      title: 'In order to live',
+      url: 'http://urlOfTheBook.com',
+      likes: 1000,
+      user: loginUser._id,
+    }
+
+    const result = await api
+      .post('/api/blogs/')
+      .set('Authorization', 'Bearer ' + chosenInfo.token)
+      .send(blogToPost) // receive JSON
+      .expect(201)
+      .expect('Content-Type', /application\/json/)
+
+    const blogToUpdate = result.body
     const newBlog = { ...blogToUpdate, title: blogToUpdate.title + ' part 2' }
-    await api.put(`/api/blogs/${blogToUpdate.id}`).send(newBlog).expect(200)
+
+    const blogsAtStart = await helper.blogsInDB()
+
+    await api
+      .put(`/api/blogs/${blogToUpdate.id}`)
+      .set('Authorization', 'Bearer ' + chosenInfo.token)
+      .send(newBlog)
+      .expect(200)
 
     const blogsAtEnd = await helper.blogsInDB()
-    expect(blogsAtEnd).toHaveLength(helper.initialBlogs.length)
+    expect(blogsAtEnd).toHaveLength(blogsAtStart.length)
 
     const titles = blogsAtEnd.map((blog) => blog.title)
     expect(titles).toContain(newBlog.title)
     expect(titles).not.toContain(blogToUpdate.title)
+
+    await api
+      .put(`/api/blogs/${blogToUpdate.id}`)
+      .set('Authorization', 'Bearer ' + notChosenInfo.token)
+      .send(newBlog)
+      .expect(403)
+
+    await api
+      .put(`/api/blogs/${blogToUpdate.id}`)
+      .set('Authorization', 'Bearer ' + invalidToken)
+      .send(newBlog)
+      .expect(403)
+
+    await api.put(`/api/blogs/${blogToUpdate.id}`).send(newBlog).expect(401)
   })
   test('fails with status code 404 if blog does not exist', async () => {
     const validNonExistingId = await helper.nonExistingBlogId()
-    await api.put(`/api/blogs/${validNonExistingId}`).send({}).expect(404)
+    const chosenInfo = infoFromToken[1]
+    await api
+      .put(`/api/blogs/${validNonExistingId}`)
+      .set('Authorization', 'Bearer ' + chosenInfo.token)
+      .send({})
+      .expect(404)
   })
 })
 
