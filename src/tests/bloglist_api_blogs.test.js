@@ -1,11 +1,38 @@
 const mongoose = require('mongoose')
 const supertest = require('supertest')
+const bcrypt = require('bcrypt')
 
 const app = require('../app')
 const BlogModel = require('../models/blog')
+const UserModel = require('../models/user')
 const helper = require('../tests/test_helper')
 
 const api = supertest(app) // mongoose connection was moved to app.js
+const saltRounds = 10
+let infoFromToken = []
+
+beforeAll(async () => {
+  await UserModel.deleteMany({})
+  for (const user of helper.initialUsers) {
+    const { username, name, password } = user
+    const passwordHash = await bcrypt.hash(password, saltRounds)
+    const newUser = new UserModel({
+      username: username,
+      name: name,
+      passwordHash,
+    })
+    await newUser.save()
+    const result = await api
+      .post('/api/login')
+      .send(user)
+      .expect(200)
+      .expect('Content-Type', /application\/json/)
+    infoFromToken = [
+      { token: result.body.token, username: result.body.username },
+      ...infoFromToken,
+    ]
+  }
+})
 
 beforeEach(async () => {
   await BlogModel.deleteMany({})
@@ -61,36 +88,51 @@ describe('GET /api/blogs/:id', () => {
   })
 })
 
-describe('POST /api/blogs/', () => {
+describe('POST authorized /api/blogs/', () => {
   test('successfully creates a new blog', async () => {
-    const newBlog = new BlogModel({
+    const chosenInfo = infoFromToken[1]
+    const loginUser = await UserModel.findOne({ username: chosenInfo.username })
+
+    const newBlog = {
       author: 'Kim Yoemi',
       title: 'In order to live',
       url: 'http://urlOfTheBook.com',
       likes: 1000,
-    }).toJSON()
+      user: loginUser._id,
+    }
 
     await api
       .post('/api/blogs/')
+      .set('Authorization', 'Bearer ' + chosenInfo.token)
       .send(newBlog) // receive JSON
       .expect(201)
       .expect('Content-Type', /application\/json/)
 
-    const currentBlogs = await helper.blogsInDB()
-    expect(currentBlogs).toHaveLength(helper.initialBlogs.length + 1)
+    const blogsAtEnd = await helper.blogsInDB()
+    expect(blogsAtEnd).toHaveLength(helper.initialBlogs.length + 1)
 
-    const titles = currentBlogs.map((blog) => blog.title)
+    const titles = blogsAtEnd.map((blog) => blog.title)
     expect(titles).toContain(newBlog.title)
+
+    const users = blogsAtEnd.map((blog) =>
+      blog.user === undefined ? blog.user : blog.user.toString()
+    )
+    expect(users).toContain(newBlog.user.toString())
   })
   test('has 0 as default likes', async () => {
-    const newBlog = new BlogModel({
+    const chosenInfo = infoFromToken[1]
+    const loginUser = await UserModel.findOne({ username: chosenInfo.username })
+
+    const newBlog = {
       author: 'Kim Yoemi',
       title: 'In order to live',
       url: 'http://urlOfTheBook.com',
-    }).toJSON()
+      user: loginUser._id,
+    }
 
     const res = await api
       .post('/api/blogs/')
+      .set('Authorization', 'Bearer ' + chosenInfo.token)
       .send(newBlog) // receive JSON
       .expect(201)
       .expect('Content-Type', /application\/json/)
@@ -98,33 +140,67 @@ describe('POST /api/blogs/', () => {
   })
 
   test('has both title and url', async () => {
+    const chosenInfo = infoFromToken[1]
+    const loginUser = await UserModel.findOne({ username: chosenInfo.username })
+
     const urlMissingBlog = {
       author: 'Yoemi Park',
       title: 'In order to live',
       likes: 1000,
+      user: loginUser._id,
     }
 
-    await api.post('/api/blogs/').send(urlMissingBlog).expect(400)
+    await api
+      .post('/api/blogs/')
+      .set('Authorization', 'Bearer ' + chosenInfo.token)
+      .send(urlMissingBlog)
+      .expect(400)
 
     const titleMissingBlog = {
       author: 'Yoemi Park',
       url: 'http://urlOfTheBook.com',
       likes: 1000,
+      user: loginUser._id,
     }
 
-    await api.post('/api/blogs/').send(titleMissingBlog).expect(400)
+    await api
+      .post('/api/blogs/')
+      .set('Authorization', 'Bearer ' + chosenInfo.token)
+      .send(titleMissingBlog)
+      .expect(400)
   })
 })
 
-describe('DELETE /api/blogs/:id', () => {
-  test('succeeds with status code 204 if id is valid', async () => {
-    const blogsAtStart = await helper.blogsInDB()
-    const blogToDelete = blogsAtStart[0]
+describe('DELETE authorized /api/blogs/:id', () => {
+  test('succeeds with status code 204 if id is valid and token matches', async () => {
+    const chosenInfo = infoFromToken[1]
+    const loginUser = await UserModel.findOne({ username: chosenInfo.username })
 
-    await api.delete(`/api/blogs/${blogToDelete.id}`).expect(204)
+    const newBlog = {
+      author: 'Kim Yoemi',
+      title: 'In order to live',
+      url: 'http://urlOfTheBook.com',
+      likes: 1000,
+      user: loginUser._id,
+    }
+
+    const result = await api
+      .post('/api/blogs/')
+      .set('Authorization', 'Bearer ' + chosenInfo.token)
+      .send(newBlog) // receive JSON
+      .expect(201)
+      .expect('Content-Type', /application\/json/)
+
+    const blogToDelete = result.body
+    const blogsAtStart = await helper.blogsInDB()
+
+    await api
+      .delete(`/api/blogs/${blogToDelete.id}`)
+      .set('Authorization', 'Bearer ' + chosenInfo.token)
+      .expect(204)
 
     const blogsAtEnd = await helper.blogsInDB()
-    expect(blogsAtEnd).toHaveLength(helper.initialBlogs.length - 1)
+    expect(blogsAtEnd).toHaveLength(blogsAtStart.length - 1)
 
     const titles = blogsAtEnd.map((blog) => blog.title)
     expect(titles).not.toContain(blogToDelete.title)
@@ -132,7 +208,45 @@ describe('DELETE /api/blogs/:id', () => {
 
   test('fails with status code 404 if blog does not exist', async () => {
     const validNonExistingId = await helper.nonExistingBlogId()
-    await api.delete(`/api/blogs/${validNonExistingId}`).expect(404)
+    const chosenInfo = infoFromToken[1]
+    await api
+      .delete(`/api/blogs/${validNonExistingId}`)
+      .set('Authorization', 'Bearer ' + chosenInfo.token)
+      .expect(404)
+  })
+
+  test('fails with status code 403 if token does not match, 401 if no token', async () => {
+    const chosenInfo = infoFromToken[1]
+    const notChosenInfo = infoFromToken[2]
+    const invalidToken = 'NotAValidToken'
+    const loginUser = await UserModel.findOne({ username: chosenInfo.username })
+
+    const newBlog = {
+      author: 'Kim Yoemi',
+      title: 'In order to live',
+      url: 'http://urlOfTheBook.com',
+      likes: 1000,
+      user: loginUser._id,
+    }
+
+    const result = await api
+      .post('/api/blogs/')
+      .set('Authorization', 'Bearer ' + chosenInfo.token)
+      .send(newBlog) // receive JSON
+      .expect(201)
+      .expect('Content-Type', /application\/json/)
+
+    const blogToDelete = result.body
+    await api
+      .delete(`/api/blogs/${blogToDelete.id}`)
+      .set('Authorization', 'Bearer ' + notChosenInfo.token)
+      .expect(403)
+    await api
+      .delete(`/api/blogs/${blogToDelete.id}`)
+      .set('Authorization', 'Bearer ' + invalidToken)
+      .expect(403)
+
+    await api.delete(`/api/blogs/${blogToDelete.id}`).expect(401)
   })
 })
 
