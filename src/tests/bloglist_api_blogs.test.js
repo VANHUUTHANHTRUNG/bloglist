@@ -313,6 +313,43 @@ describe('UPDATE authorized /api/blogs/:id', () => {
       .send({})
       .expect(404)
   })
+
+  test('add 1 like to a blog requires a token but not necessarily matched', async () => {
+    const chosenInfo = infoFromToken[1]
+    const notChosenInfo = infoFromToken[2]
+
+    const loginUser = await UserModel.findOne({ username: chosenInfo.username })
+    const blogToPost = {
+      author: 'Kim Yoemi',
+      title: 'In order to live',
+      url: 'http://urlOfTheBook.com',
+      likes: 1000,
+      user: loginUser._id,
+    }
+
+    const postResult = await api
+      .post('/api/blogs/')
+      .set('Authorization', 'Bearer ' + chosenInfo.token)
+      .send(blogToPost) // receive JSON
+      .expect(201)
+      .expect('Content-Type', /application\/json/)
+
+    const blogToUpdate = postResult.body
+    const newBlog = { ...blogToUpdate, likes: blogToUpdate.likes + 1 }
+
+    const blogsAtStart = await helper.blogsInDB()
+
+    const putResult = await api
+      .put(`/api/blogs/${blogToUpdate.id}`)
+      .set('Authorization', 'Bearer ' + notChosenInfo.token)
+      .send(newBlog)
+      .expect(200)
+
+    const updatedBlog = putResult.body
+    expect(updatedBlog.likes).toBe(blogToUpdate.likes + 1)
+    const blogsAtEnd = await helper.blogsInDB()
+    expect(blogsAtEnd).toHaveLength(blogsAtStart.length)
+  })
 })
 
 afterAll(async () => await mongoose.connection.close())

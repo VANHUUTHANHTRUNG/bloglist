@@ -6,6 +6,7 @@ const UserModel = require('../models/user')
 const helper = require('../tests/test_helper')
 const middleware = require('../utils/middleware')
 const logger = require('../utils/logger')
+const user = require('../models/user')
 
 blogRouter.get('/', async (req, res) => {
   const blogs = await BlogModel.find({}).populate('user', {
@@ -58,9 +59,26 @@ blogRouter.delete('/:id', middleware.userExtractor, async (req, res) => {
 
 blogRouter.put('/:id', middleware.userExtractor, async (req, res) => {
   const userFromToken = req.user
-  const newBlog = { ...req.body }
+  const newBlog = req.body
   const blogToUpdate = await BlogModel.findById(req.params.id)
   if (!blogToUpdate) return res.status(404).end()
+  const { likes: newBlogLikes, ...restNewBlog } = newBlog
+  const { likes: blogToUpdateLikes, ...restBlogToUpdate } = JSON.parse(
+    JSON.stringify(blogToUpdate.toJSON())
+  )
+  if (
+    newBlogLikes === blogToUpdateLikes + 1 &&
+    JSON.stringify(restNewBlog) === JSON.stringify(restBlogToUpdate)
+  ) {
+    const updatedBlog = await BlogModel.findByIdAndUpdate(
+      req.params.id,
+      newBlog,
+      { new: true }
+    )
+    if (updatedBlog) {
+      return res.status(200).json(updatedBlog).end()
+    }
+  }
   if (userFromToken._id.toString() !== blogToUpdate.user.toString())
     return res.status(403).json('no creator right to update')
   const updatedBlog = await BlogModel.findByIdAndUpdate(
