@@ -60,9 +60,6 @@ blogRouter.delete('/:id', middleware.userExtractor, async (req, res) => {
 blogRouter.put('/:id', middleware.userExtractor, async (req, res) => {
   const userFromToken = req.user
   const newBlog = req.body
-  // console.log(userFromToken)
-  // console.log(newBlog)
-  // console.log(req.params.id)
   const blogToUpdate = await BlogModel.findById(req.params.id)
   if (!blogToUpdate) return res.status(404).end()
   const { likes: newBlogLikes, ...restNewBlog } = newBlog
